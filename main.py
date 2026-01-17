@@ -2,35 +2,30 @@ import flet as ft
 from datetime import datetime
 
 def main(page: ft.Page):
-    # Configuración de la página
     page.title = "RucBot Ecuador 🇪🇨"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 0
-    page.bgcolor = "#FEF7F0"
+    page.bgcolor = "#F5F7FA"
     page.window.width = 480
     page.window.height = 780
     page.window.min_width = 380
     page.window.min_height = 600
     
-    # Paleta de colores
     COLORS = {
-        "primary": "#E07B39",
-        "primary_dark": "#C45E2A",
-        "primary_light": "#F4A261",
+        "primary": "#0c4597",
+        "primary_dark": "#083670",
+        "primary_light": "#1a5fc9",
         "secondary": "#2A9D8F",
-        "accent": "#E76F51",
-        "bg_cream": "#FEF7F0",
+        "bg_main": "#F5F7FA",
         "bg_white": "#FFFFFF",
-        "bg_bot": "#FFF5EB",
-        "bg_user": "#E07B39",
-        "text_dark": "#264653",
-        "text_medium": "#5A6C7D",
+        "bg_bot": "#EEF2F7",
+        "bg_user": "#0c4597",
+        "text_dark": "#1E293B",
+        "text_medium": "#64748B",
         "text_light": "#FFFFFF",
-        "border": "#E9E2DA",
-        "shadow": "#D4C4B5",
+        "border": "#E2E8F0",
     }
 
-    # Contenedor de mensajes
     chat_container = ft.ListView(
         expand=True,
         spacing=16,
@@ -44,7 +39,7 @@ def main(page: ft.Page):
             width=46,
             height=46,
             border_radius=23,
-            bgcolor="#FFE8D6",
+            bgcolor="#D6E4F5",
             alignment=ft.Alignment(0, 0),
             shadow=ft.BoxShadow(
                 spread_radius=0,
@@ -135,7 +130,7 @@ def main(page: ft.Page):
                         width=42,
                         height=42,
                         border_radius=21,
-                        bgcolor="#E8E0D8",
+                        bgcolor="#E2E8F0",
                         alignment=ft.Alignment(0, 0),
                     ),
                 ],
@@ -165,7 +160,6 @@ def main(page: ft.Page):
         chat_container.controls.append(create_bot_message(bot_response))
         page.update()
 
-    # Header
     header = ft.Container(
         content=ft.Row(
             controls=[
@@ -223,11 +217,7 @@ def main(page: ft.Page):
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         ),
         padding=ft.padding.only(left=20, right=12, top=16, bottom=16),
-        gradient=ft.LinearGradient(
-            begin=ft.Alignment(-1, 0),
-            end=ft.Alignment(1, 0),
-            colors=[COLORS["primary"], COLORS["accent"]],
-        ),
+        bgcolor=COLORS["primary"],
         shadow=ft.BoxShadow(
             spread_radius=0,
             blur_radius=15,
@@ -236,7 +226,6 @@ def main(page: ft.Page):
         ),
     )
 
-    # Acciones rápidas
     def create_quick_action(icon: str, label: str, on_click=None):
         return ft.Container(
             content=ft.Row(
@@ -279,7 +268,6 @@ def main(page: ft.Page):
         padding=ft.padding.only(left=20, right=20, top=12, bottom=8),
     )
 
-    # Campo de entrada
     message_input = ft.TextField(
         hint_text="Escribe tu pregunta aquí...",
         hint_style=ft.TextStyle(
@@ -343,10 +331,9 @@ def main(page: ft.Page):
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
         padding=ft.padding.only(left=16, right=16, top=12, bottom=20),
-        bgcolor=COLORS["bg_cream"],
+        bgcolor=COLORS["bg_main"],
     )
 
-    # Tarjeta de bienvenida
     welcome_card = ft.Container(
         content=ft.Column(
             controls=[
@@ -355,7 +342,7 @@ def main(page: ft.Page):
                     width=80,
                     height=80,
                     border_radius=40,
-                    bgcolor="#FFE8D6",
+                    bgcolor="#D6E4F5",
                     alignment=ft.Alignment(0, 0),
                 ),
                 ft.Text(
@@ -397,7 +384,6 @@ def main(page: ft.Page):
 
     chat_container.controls.append(welcome_card)
 
-    # Estructura principal
     page.add(
         ft.Column(
             controls=[
@@ -406,7 +392,7 @@ def main(page: ft.Page):
                 ft.Container(
                     content=chat_container,
                     expand=True,
-                    bgcolor=COLORS["bg_cream"],
+                    bgcolor=COLORS["bg_main"],
                 ),
                 input_area,
             ],
