@@ -594,8 +594,11 @@ def main(page: ft.Page):
                                 
                                 ft.Text("📋 **Detalles de las oficinas:**", size=12, color=COLORS["text_medium"], weight=ft.FontWeight.W_500),
                                 ft.Container(
-                                    content=oficinas_column,
-                                    height=min(250, 110 * len(oficinas)),
+                                    content=ft.Column(
+                                        controls=[oficinas_column],
+                                        scroll=ft.ScrollMode.AUTO,
+                                    ),
+                                    height=min(300, 110 * len(oficinas)),
                                     border=ft.border.all(1, COLORS["border"]),
                                     border_radius=12,
                                     padding=ft.padding.all(10),
@@ -837,6 +840,117 @@ def main(page: ft.Page):
             padding=ft.padding.only(left=20, right=20),
         )
     
+    def crear_mensaje_requisitos_con_enlaces(requisitos):
+        """Crea un mensaje de requisitos con enlaces clickeables"""
+        timestamp = get_timestamp()
+        
+        # Extraer información del dict de requisitos
+        texto_principal = f"📋 **{requisitos['titulo']}**\n\n"
+        
+        if requisitos.get('descripcion'):
+            texto_principal += f"_{requisitos['descripcion']}_\n\n"
+        
+        texto_principal += "📄 **Documentos necesarios:**\n"
+        for doc in requisitos['documentos']:
+            texto_principal += f"{doc}\n"
+        
+        texto_principal += "\n🚶 **Pasos a seguir:**\n"
+        for paso in requisitos['pasos']:
+            texto_principal += f"{paso}\n"
+        
+        if requisitos.get('tiempo'):
+            texto_principal += f"\n⏰ **Tiempo de trámite:** {requisitos['tiempo']}\n"
+        
+        if requisitos.get('costo'):
+            texto_principal += f"{requisitos['costo']}\n"
+        
+        if requisitos.get('observaciones'):
+            texto_principal += f"\n💡 **Observaciones:** {requisitos['observaciones']}\n"
+        
+        texto_principal += f"\n📍 **Puedes realizar este trámite en cualquier oficina del SRI.**"
+        
+        # Crear controles para el mensaje
+        controles = [
+            ft.Row(
+                controls=[
+                    ft.Text("RucBot", size=12, weight=ft.FontWeight.W_600, color=COLORS["primary"]),
+                    ft.Text(timestamp, size=10, color=COLORS["text_medium"]),
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            ),
+            ft.Text(texto_principal, size=get_font("msg"), color=COLORS["text_dark"], selectable=True),
+        ]
+        
+        # Si hay enlace, agregar botones clickeables
+        if requisitos.get('enlace'):
+            controles.append(ft.Container(height=12))
+            controles.append(ft.Text("🔗 **Enlaces importantes:**", size=13, color=COLORS["text_medium"], weight=ft.FontWeight.W_500))
+            
+            # Botón para el formulario/información específica
+            def abrir_enlace(e):
+                page.launch_url(requisitos['enlace'])
+            
+            controles.append(
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.DESCRIPTION, size=18, color=COLORS["text_light"]),
+                            ft.Text("Descargar formulario / Ver más información", size=13, color=COLORS["text_light"], weight=ft.FontWeight.W_500),
+                        ],
+                        spacing=8,
+                    ),
+                    padding=ft.padding.only(left=16, right=16, top=12, bottom=12),
+                    bgcolor=COLORS["primary"],
+                    border_radius=12,
+                    ink=True,
+                    on_click=abrir_enlace,
+                )
+            )
+            
+            # Botón para portal SRI
+            def abrir_portal_sri(e):
+                page.launch_url("https://www.sri.gob.ec")
+            
+            controles.append(
+                ft.Container(
+                    content=ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.OPEN_IN_NEW, size=18, color=COLORS["text_dark"]),
+                            ft.Text("Portal SRI", size=13, color=COLORS["text_dark"], weight=ft.FontWeight.W_500),
+                        ],
+                        spacing=8,
+                    ),
+                    padding=ft.padding.only(left=16, right=16, top=12, bottom=12),
+                    bgcolor=COLORS["bg_white"],
+                    border_radius=12,
+                    border=ft.border.all(1.5, COLORS["border"]),
+                    ink=True,
+                    on_click=abrir_portal_sri,
+                )
+            )
+        
+        return ft.Container(
+            content=ft.Row(
+                controls=[
+                    create_bot_avatar(),
+                    ft.Container(
+                        content=ft.Column(
+                            controls=controles,
+                            spacing=4,
+                        ),
+                        bgcolor=COLORS["bg_bot"],
+                        padding=ft.padding.only(left=16, right=20, top=12, bottom=14),
+                        border_radius=ft.border_radius.only(top_left=4, top_right=20, bottom_left=20, bottom_right=20),
+                        expand=True,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.START,
+                vertical_alignment=ft.CrossAxisAlignment.START,
+                spacing=12,
+            ),
+            padding=ft.padding.only(left=20, right=20),
+        )
+    
     def mostrar_requisitos_tipo(tipo_tramite, titulo):
         chat_container.controls.append(create_user_message(titulo))
         resetear_temporizador()
@@ -844,8 +958,8 @@ def main(page: ft.Page):
         if MODULOS_DISPONIBLES:
             requisitos = obtener_requisitos(tipo_tramite)
             if requisitos:
-                texto = formatear_requisitos(requisitos)
-                chat_container.controls.append(create_bot_message(texto))
+                # Usar la nueva función con enlaces clickeables
+                chat_container.controls.append(crear_mensaje_requisitos_con_enlaces(requisitos))
                 chat_container.controls.append(crear_pregunta_mas_ayuda())
             else:
                 chat_container.controls.append(create_bot_message("No encontré información para ese trámite."))
@@ -1077,7 +1191,7 @@ def main(page: ft.Page):
             return
         
         # 4. Otras respuestas
-        if any(word in user_lower for word in ["hola", "buenos", "buenas", "saludos", "hi", "hello"]):
+        if any(word in user_lower for word in [".","hola", "buenos", "buenas", "saludos", "hi", "hello"]):
             chat_container.controls.append(create_bot_message("¡Hola! 👋 Soy RucBot, tu asistente para trámites del RUC en Ecuador.\n\n¿En qué puedo ayudarte hoy?\n\n• Información sobre el RUC\n• Requisitos para trámites\n• Ubicaciones de oficinas del SRI"))
         
         elif any(word in user_lower for word in ["ruc", "que es", "qué es", "significa"]):
@@ -1085,7 +1199,7 @@ def main(page: ft.Page):
             mostrar_que_es_ruc()
             return
         
-        elif any(word in user_lower for word in ["requisito", "documento", "necesito", "tramite", "trámite", "sacar", "obtener", "papeles", "requisitos"]):
+        elif any(word in user_lower for word in ["Que nesecito para sacar el ruc","que llevo para el ruc","requisito", "documento", "necesito", "tramite", "trámite", "sacar", "obtener", "papeles", "requisitos"]):
             chat_container.controls.append(mostrar_opciones_requisitos())
         
         elif any(word in user_lower for word in ["gracias", "thank", "agradezco"]):
