@@ -2,25 +2,10 @@ import flet as ft
 from datetime import datetime
 import asyncio
 
-# Intentar importar OpenAI
-try:
-    from openai import OpenAI
-    OPENAI_API_KEY = "tu-api-key-aqui"  # CAMBIA ESTO POR TU API KEY
-    client = OpenAI(api_key=OPENAI_API_KEY)
-    OPENAI_DISPONIBLE = True
-except:
-    OPENAI_DISPONIBLE = False
-    print("⚠️ OpenAI no disponible")
-
 # Importar módulos personalizados
 try:
-    from ubicacion import ModuloUbicacion, detectar_ubicacion
-    from requisitos import (
-        obtener_requisitos, 
-        formatear_requisitos,
-        detectar_consulta_requisitos,
-        INFORMACION_GENERAL
-    )
+    from ubicacion import ModuloUbicacion
+    from requisitos import obtener_requisitos, formatear_requisitos
     MODULOS_DISPONIBLES = True
 except Exception as e:
     MODULOS_DISPONIBLES = False
@@ -35,35 +20,195 @@ if MODULOS_DISPONIBLES:
     except Exception as e:
         print(f"⚠️ No se pudo cargar ubicaciones: {e}")
 
-SYSTEM_PROMPT = """Eres RucBot, un asistente virtual amigable del SRI de Ecuador.
-Ayudas con trámites del RUC. Eres amable, claro y profesional.
-Siempre responde en español y de forma concisa."""
+# ========== DICCIONARIO DE CIUDADES Y PROVINCIAS ==========
+# Mapeo de variaciones de escritura a la provincia correcta
+CIUDADES_PROVINCIAS = {
+    # GUAYAS
+    "guayaquil": "GUAYAS", "guayakil": "GUAYAS", "gye": "GUAYAS", "guayas": "GUAYAS",
+    "milagro": "GUAYAS", "milagros": "GUAYAS", "milagroo": "GUAYAS",
+    "daule": "GUAYAS", "daules": "GUAYAS",
+    "duran": "GUAYAS", "durán": "GUAYAS",
+    "samborondon": "GUAYAS", "samborondón": "GUAYAS",
+    "naranjal": "GUAYAS", "naranjales": "GUAYAS",
+    "playas": "GUAYAS", "playa": "GUAYAS",
+    
+    # PICHINCHA
+    "quito": "PICHINCHA", "qito": "PICHINCHA", "kito": "PICHINCHA", "pichincha": "PICHINCHA",
+    "sangolqui": "PICHINCHA", "sangolquí": "PICHINCHA",
+    "tumbaco": "PICHINCHA",
+    "cayambe": "PICHINCHA",
+    
+    # MANABÍ
+    "manabi": "MANABÍ", "manabí": "MANABÍ",
+    "portoviejo": "MANABÍ", "portobiejo": "MANABÍ", "porto viejo": "MANABÍ",
+    "manta": "MANABÍ", "mamta": "MANABÍ",
+    "chone": "MANABÍ", "chones": "MANABÍ",
+    "jipijapa": "MANABÍ", "jipipapa": "MANABÍ",
+    "bahia": "MANABÍ", "bahía": "MANABÍ", "bahia de caraquez": "MANABÍ",
+    "pedernales": "MANABÍ", "perdernales": "MANABÍ",
+    "el carmen": "MANABÍ", "elcarmen": "MANABÍ",
+    
+    # AZUAY
+    "cuenca": "AZUAY", "cuenka": "AZUAY", "azuay": "AZUAY",
+    "gualaceo": "AZUAY",
+    
+    # EL ORO
+    "machala": "EL ORO", "el oro": "EL ORO", "eloro": "EL ORO",
+    "santa rosa": "EL ORO", "santarosa": "EL ORO",
+    "huaquillas": "EL ORO", "huakillas": "EL ORO",
+    "piñas": "EL ORO", "pinas": "EL ORO",
+    
+    # ESMERALDAS
+    "esmeraldas": "ESMERALDAS", "esmeralda": "ESMERALDAS",
+    "atacames": "ESMERALDAS", "atacame": "ESMERALDAS",
+    "quininde": "ESMERALDAS", "quinindé": "ESMERALDAS",
+    
+    # SANTO DOMINGO
+    "santo domingo": "SANTO DOMINGO", "santodomingo": "SANTO DOMINGO",
+    "la concordia": "SANTO DOMINGO", "concordia": "SANTO DOMINGO",
+    
+    # LOS RÍOS
+    "los rios": "LOS RÍOS", "losrios": "LOS RÍOS", "losríos": "LOS RÍOS",
+    "babahoyo": "LOS RÍOS", "babaojo": "LOS RÍOS",
+    "quevedo": "LOS RÍOS", "kebedo": "LOS RÍOS",
+    "ventanas": "LOS RÍOS",
+    
+    # TUNGURAHUA
+    "ambato": "TUNGURAHUA", "hambato": "TUNGURAHUA", "tungurahua": "TUNGURAHUA",
+    "baños": "TUNGURAHUA", "banos": "TUNGURAHUA",
+    
+    # CHIMBORAZO
+    "riobamba": "CHIMBORAZO", "rio bamba": "CHIMBORAZO", "chimborazo": "CHIMBORAZO",
+    
+    # LOJA
+    "loja": "LOJA", "lojas": "LOJA",
+    "cariamanga": "LOJA",
+    
+    # IMBABURA
+    "ibarra": "IMBABURA", "ivarra": "IMBABURA", "imbabura": "IMBABURA",
+    "otavalo": "IMBABURA", "otabalo": "IMBABURA",
+    
+    # COTOPAXI
+    "latacunga": "COTOPAXI", "cotopaxi": "COTOPAXI",
+    "la mana": "COTOPAXI", "lamana": "COTOPAXI", "la maná": "COTOPAXI",
+    
+    # CARCHI
+    "tulcan": "CARCHI", "tulcán": "CARCHI", "carchi": "CARCHI",
+    
+    # BOLÍVAR
+    "guaranda": "BOLÍVAR", "bolivar": "BOLÍVAR", "bolívar": "BOLÍVAR",
+    
+    # CAÑAR
+    "azogues": "CAÑAR", "cañar": "CAÑAR", "canar": "CAÑAR",
+    "la troncal": "CAÑAR", "troncal": "CAÑAR",
+    
+    # SANTA ELENA
+    "santa elena": "SANTA ELENA", "santaelena": "SANTA ELENA",
+    "libertad": "SANTA ELENA", "la libertad": "SANTA ELENA",
+    "salinas": "SANTA ELENA",
+    
+    # GALÁPAGOS
+    "galapagos": "GALÁPAGOS", "galápagos": "GALÁPAGOS",
+    "santa cruz": "GALÁPAGOS", "san cristobal": "GALÁPAGOS", "san cristóbal": "GALÁPAGOS",
+    
+    # SUCUMBÍOS
+    "lago agrio": "SUCUMBÍOS", "lagoagrio": "SUCUMBÍOS", "sucumbios": "SUCUMBÍOS", "sucumbíos": "SUCUMBÍOS",
+    "nueva loja": "SUCUMBÍOS", "nuevaloja": "SUCUMBÍOS",
+    "shushufindi": "SUCUMBÍOS",
+    
+    # NAPO
+    "tena": "NAPO", "napo": "NAPO",
+    
+    # ORELLANA
+    "coca": "ORELLANA", "el coca": "ORELLANA", "orellana": "ORELLANA",
+    "francisco de orellana": "ORELLANA",
+    
+    # PASTAZA
+    "puyo": "PASTAZA", "pastaza": "PASTAZA",
+    
+    # MORONA SANTIAGO
+    "macas": "MORONA SANTIAGO", "morona": "MORONA SANTIAGO", "morona santiago": "MORONA SANTIAGO",
+    
+    # ZAMORA CHINCHIPE
+    "zamora": "ZAMORA CHINCHIPE", "zamora chinchipe": "ZAMORA CHINCHIPE",
+    "yantzaza": "ZAMORA CHINCHIPE",
+}
 
-def obtener_respuesta_chatgpt(mensaje_usuario, historial=[], contexto_extra=None):
-    if not OPENAI_DISPONIBLE:
-        return "Lo siento, el servicio de IA no está disponible. 🙏"
+# Palabras clave para detectar consultas de ubicación (bien o mal escritas)
+PALABRAS_UBICACION = [
+    # Bien escritas
+    "ubicacion", "ubicación", "ubicaciones", "oficina", "oficinas", "donde", "dónde",
+    "direccion", "dirección", "direcciones", "punto", "puntos", "atencion", "atención",
+    "agencia", "agencias", "sri", "cerca", "cercano", "cercana", "cercanos", "cercanas",
+    "ir", "voy", "queda", "quedan", "encuentro", "encuentran", "lugar", "lugares",
+    "local", "locales", "sucursal", "sucursales", "sede", "sedes",
     
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    # Mal escritas comunes
+    "ubicasion", "ubicasión", "uvicacion", "uvicación", "hubicacion", "hubicación",
+    "ubicaion", "ubicacon", "hubicacion", "hubicación",
+    "ofisina", "ofisinas", "oficna", "oficnas",
+    "direcicon", "direccon", "diresion", "diresión",
+    "atension", "atensión", "atencion", "atencíon",
+    "agenci", "ajencia", "agensias",
+    "serca", "sercano", "sercana", "serka", "serkano",
+    "dond", "done", "adonde", "adónde",
+    "punto de encuentro", "puntos de encuentro", "punto encuentro",
+    "punto de atencion", "punto de atención", "punto atencion",
     
-    if contexto_extra:
-        messages.append({"role": "system", "content": f"Información adicional:\n{contexto_extra}"})
+    # Frases comunes
+    "soy de", "vivo en", "estoy en", "vengo de", "me encuentro en",
+    "necesito ir", "tengo que ir", "quiero ir", "como llego", "cómo llego",
+]
+
+# Información sobre el RUC
+INFO_RUC = """📋 **¿Qué es el RUC?**
+
+El RUC (Registro Único de Contribuyentes) es el número de identificación tributaria que se asigna a todas las personas naturales y sociedades que realizan actividades económicas en Ecuador.
+
+🎯 **¿Para qué sirve?**
+• Identificarte ante el SRI como contribuyente
+• Emitir facturas y comprobantes de venta
+• Declarar y pagar impuestos
+• Realizar trámites tributarios
+
+👥 **¿Quién debe obtenerlo?**
+• Personas naturales con actividad económica
+• Empresas y sociedades
+• Profesionales independientes
+• Comerciantes y emprendedores
+
+💰 **Costo:** GRATUITO
+⏱️ **Tiempo:** Inmediato (mismo día)
+
+🌐 **Opciones para obtenerlo:**
+• En línea: www.sri.gob.ec (con firma electrónica)
+• Presencial: Cualquier agencia del SRI"""
+
+
+def detectar_ubicacion_en_mensaje(mensaje):
+    """
+    Detecta si el mensaje contiene palabras relacionadas con ubicación
+    """
+    mensaje_lower = mensaje.lower()
     
-    for h in historial[-10:]:
-        messages.append(h)
+    for palabra in PALABRAS_UBICACION:
+        if palabra in mensaje_lower:
+            return True
+    return False
+
+
+def detectar_ciudad_provincia(mensaje):
+    """
+    Detecta si el mensaje menciona una ciudad o provincia y retorna la provincia correspondiente
+    """
+    mensaje_lower = mensaje.lower()
     
-    messages.append({"role": "user", "content": mensaje_usuario})
+    # Buscar coincidencias en el diccionario
+    for ciudad, provincia in CIUDADES_PROVINCIAS.items():
+        if ciudad in mensaje_lower:
+            return provincia, ciudad
     
-    try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            max_tokens=800,
-            temperature=0.7
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        print(f"Error OpenAI: {e}")
-        return "Lo siento, tuve un problema. ¿Podrías intentarlo de nuevo? 🙏"
+    return None, None
 
 
 def main(page: ft.Page):
@@ -78,7 +223,6 @@ def main(page: ft.Page):
     is_dark_mode = False
     font_size_level = 1
     current_progress = 0
-    historial_chat = []
     
     FONT_SIZES = {
         0: {"msg": 13, "title": 18, "subtitle": 12, "hint": 13},
@@ -98,6 +242,8 @@ def main(page: ft.Page):
         "border": "#E2E8F0",
         "avatar_bg": "#D6E4F5",
         "quick_text": "#1E293B",
+        "success": "#10B981",
+        "warning": "#F59E0B",
     }
     
     DARK_THEME = {
@@ -112,6 +258,8 @@ def main(page: ft.Page):
         "border": "#475569",
         "avatar_bg": "#1E3A5F",
         "quick_text": "#F1F5F9",
+        "success": "#34D399",
+        "warning": "#FBBF24",
     }
     
     COLORS = LIGHT_THEME.copy()
@@ -123,7 +271,7 @@ def main(page: ft.Page):
     def get_timestamp():
         return datetime.now().strftime("%H:%M")
 
-    # ========== DEFINIR FUNCIONES DE UI PRIMERO ==========
+    # ========== FUNCIONES DE UI ==========
     
     def create_bot_avatar():
         return ft.Container(
@@ -362,6 +510,117 @@ def main(page: ft.Page):
             padding=ft.padding.only(left=20, right=20),
         )
 
+    # ========== FUNCIÓN QUÉ ES EL RUC ==========
+    
+    def mostrar_que_es_ruc(e=None):
+        timestamp = get_timestamp()
+        
+        def si_quiero_tramite(e):
+            chat_container.controls.append(create_user_message("Sí, quiero hacer el trámite"))
+            chat_container.controls.append(mostrar_opciones_requisitos())
+            page.update()
+        
+        def no_solo_info(e):
+            chat_container.controls.append(create_user_message("No, solo quería información"))
+            chat_container.controls.append(create_bot_message("¡Perfecto! Si más adelante necesitas hacer algún trámite del RUC, aquí estaré para ayudarte. 😊\n\n¿Hay algo más en lo que pueda ayudarte?"))
+            page.update()
+        
+        def ver_ubicaciones(e):
+            chat_container.controls.append(create_user_message("Ver oficinas del SRI"))
+            mostrar_ubicaciones()
+        
+        mensaje_ruc = ft.Container(
+            content=ft.Row(
+                controls=[
+                    create_bot_avatar(),
+                    ft.Container(
+                        content=ft.Column(
+                            controls=[
+                                ft.Row(
+                                    controls=[
+                                        ft.Text("RucBot", size=12, weight=ft.FontWeight.W_600, color=COLORS["primary"]),
+                                        ft.Text(timestamp, size=10, color=COLORS["text_medium"]),
+                                    ],
+                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                ),
+                                ft.Text(INFO_RUC, size=get_font("msg"), color=COLORS["text_dark"], selectable=True),
+                                ft.Container(height=12),
+                                ft.Divider(height=1, color=COLORS["border"]),
+                                ft.Container(height=12),
+                                ft.Text("¿Te gustaría realizar algún trámite del RUC?", 
+                                       size=get_font("msg"), weight=ft.FontWeight.W_600, color=COLORS["primary"]),
+                                ft.Container(height=10),
+                                ft.Column(
+                                    controls=[
+                                        ft.Container(
+                                            content=ft.Row(
+                                                controls=[
+                                                    ft.Icon(ft.Icons.ASSIGNMENT, size=18, color=COLORS["text_light"]),
+                                                    ft.Text("Sí, quiero ver los requisitos", size=13, color=COLORS["text_light"], weight=ft.FontWeight.W_500),
+                                                ],
+                                                spacing=8,
+                                            ),
+                                            padding=ft.padding.only(left=16, right=16, top=12, bottom=12),
+                                            bgcolor=COLORS["success"],
+                                            border_radius=12,
+                                            ink=True,
+                                            on_click=si_quiero_tramite,
+                                            width=280,
+                                        ),
+                                        ft.Container(
+                                            content=ft.Row(
+                                                controls=[
+                                                    ft.Icon(ft.Icons.LOCATION_ON, size=18, color=COLORS["text_light"]),
+                                                    ft.Text("Ver oficinas del SRI cercanas", size=13, color=COLORS["text_light"], weight=ft.FontWeight.W_500),
+                                                ],
+                                                spacing=8,
+                                            ),
+                                            padding=ft.padding.only(left=16, right=16, top=12, bottom=12),
+                                            bgcolor=COLORS["primary"],
+                                            border_radius=12,
+                                            ink=True,
+                                            on_click=ver_ubicaciones,
+                                            width=280,
+                                        ),
+                                        ft.Container(
+                                            content=ft.Row(
+                                                controls=[
+                                                    ft.Icon(ft.Icons.INFO_OUTLINE, size=18, color=COLORS["text_dark"]),
+                                                    ft.Text("No, solo quería información", size=13, color=COLORS["text_dark"], weight=ft.FontWeight.W_500),
+                                                ],
+                                                spacing=8,
+                                            ),
+                                            padding=ft.padding.only(left=16, right=16, top=12, bottom=12),
+                                            bgcolor=COLORS["bg_white"],
+                                            border_radius=12,
+                                            border=ft.border.all(1.5, COLORS["border"]),
+                                            ink=True,
+                                            on_click=no_solo_info,
+                                            width=280,
+                                        ),
+                                    ],
+                                    spacing=8,
+                                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
+                            ],
+                            spacing=4,
+                        ),
+                        bgcolor=COLORS["bg_bot"],
+                        padding=ft.padding.only(left=16, right=16, top=12, bottom=16),
+                        border_radius=ft.border_radius.only(top_left=4, top_right=20, bottom_left=20, bottom_right=20),
+                        expand=True,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.START,
+                vertical_alignment=ft.CrossAxisAlignment.START,
+                spacing=12,
+            ),
+            padding=ft.padding.only(left=20, right=20),
+        )
+        
+        chat_container.controls.append(mensaje_ruc)
+        page.update()
+
     # ========== FUNCIONES DE UBICACIONES ==========
     
     def crear_detalle_oficina(oficina):
@@ -390,7 +649,107 @@ def main(page: ft.Page):
             margin=ft.margin.only(top=6),
         )
     
+    def mostrar_ubicaciones_por_provincia(provincia, ciudad_mencionada=None):
+        """Muestra las oficinas de una provincia específica"""
+        timestamp = get_timestamp()
+        
+        if not modulo_ubicacion or modulo_ubicacion.df.empty:
+            chat_container.controls.append(create_bot_message("⚠️ No pude cargar las ubicaciones."))
+            page.update()
+            return
+        
+        oficinas = modulo_ubicacion.buscar_por_provincia(provincia)
+        
+        if not oficinas:
+            chat_container.controls.append(create_bot_message(f"No encontré oficinas del SRI en {provincia}. 😕\n\n¿Te gustaría ver todas las provincias disponibles?"))
+            page.update()
+            return
+        
+        # Crear lista de oficinas
+        oficinas_column = ft.Column(controls=[], spacing=6)
+        for of in oficinas:
+            oficinas_column.controls.append(crear_detalle_oficina(of))
+        
+        texto_intro = f"📍 ¡Encontré {len(oficinas)} oficina(s) del SRI en {provincia}!"
+        if ciudad_mencionada:
+            texto_intro = f"📍 Como mencionaste que eres de {ciudad_mencionada.title()}, te muestro las oficinas del SRI en {provincia}:"
+        
+        def ver_otras_provincias(e):
+            chat_container.controls.append(create_user_message("Ver otras provincias"))
+            mostrar_ubicaciones()
+        
+        def ver_requisitos(e):
+            chat_container.controls.append(create_user_message("Ver requisitos"))
+            chat_container.controls.append(mostrar_opciones_requisitos())
+            page.update()
+        
+        mensaje = ft.Container(
+            content=ft.Row(
+                controls=[
+                    create_bot_avatar(),
+                    ft.Container(
+                        content=ft.Column(
+                            controls=[
+                                ft.Row(
+                                    controls=[
+                                        ft.Text("RucBot", size=12, weight=ft.FontWeight.W_600, color=COLORS["primary"]),
+                                        ft.Text(timestamp, size=10, color=COLORS["text_medium"]),
+                                    ],
+                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                ),
+                                ft.Text(texto_intro, size=get_font("msg"), color=COLORS["text_dark"]),
+                                ft.Container(height=8),
+                                ft.Container(
+                                    content=oficinas_column,
+                                    height=min(300, 110 * len(oficinas)),
+                                    border=ft.border.all(1, COLORS["border"]),
+                                    border_radius=12,
+                                    padding=ft.padding.all(10),
+                                    bgcolor=COLORS["bg_main"],
+                                ),
+                                ft.Container(height=12),
+                                ft.Row(
+                                    controls=[
+                                        ft.Container(
+                                            content=ft.Text("🗺️ Otras provincias", size=12, color=COLORS["text_light"]),
+                                            padding=ft.padding.only(left=12, right=12, top=8, bottom=8),
+                                            bgcolor=COLORS["primary"],
+                                            border_radius=16,
+                                            ink=True,
+                                            on_click=ver_otras_provincias
+                                        ),
+                                        ft.Container(
+                                            content=ft.Text("📋 Ver requisitos", size=12, color=COLORS["text_light"]),
+                                            padding=ft.padding.only(left=12, right=12, top=8, bottom=8),
+                                            bgcolor=COLORS["success"],
+                                            border_radius=16,
+                                            ink=True,
+                                            on_click=ver_requisitos
+                                        ),
+                                    ],
+                                    spacing=8,
+                                ),
+                            ],
+                            spacing=4,
+                        ),
+                        bgcolor=COLORS["bg_bot"],
+                        padding=ft.padding.only(left=16, right=16, top=12, bottom=14),
+                        border_radius=ft.border_radius.only(top_left=4, top_right=20, bottom_left=20, bottom_right=20),
+                        expand=True,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.START,
+                vertical_alignment=ft.CrossAxisAlignment.START,
+                spacing=12,
+            ),
+            padding=ft.padding.only(left=20, right=20),
+        )
+        
+        chat_container.controls.append(mensaje)
+        page.update()
+    
     def mostrar_ubicaciones(e=None):
+        """Muestra todas las provincias con checkbox"""
         timestamp = get_timestamp()
         
         if not modulo_ubicacion or modulo_ubicacion.df.empty:
@@ -479,36 +838,6 @@ def main(page: ft.Page):
         chat_container.controls.append(mensaje_ubicaciones)
         page.update()
 
-    # ========== INDICADOR DE ESCRITURA ==========
-    typing_indicator = ft.Container(
-        content=ft.Row(
-            controls=[
-                ft.Container(
-                    content=ft.Image(src=LOGO_PATH, width=30, height=30, fit="contain"),
-                    width=46, height=46, border_radius=23,
-                    bgcolor=COLORS["avatar_bg"],
-                    alignment=ft.Alignment(0, 0),
-                ),
-                ft.Container(
-                    content=ft.Row(
-                        controls=[
-                            ft.Container(width=8, height=8, border_radius=4, bgcolor=COLORS["primary"]),
-                            ft.Container(width=8, height=8, border_radius=4, bgcolor=COLORS["primary"]),
-                            ft.Container(width=8, height=8, border_radius=4, bgcolor=COLORS["primary"]),
-                        ],
-                        spacing=4,
-                    ),
-                    bgcolor=COLORS["bg_bot"],
-                    padding=ft.padding.all(16),
-                    border_radius=20,
-                ),
-            ],
-            spacing=12,
-        ),
-        visible=False,
-        padding=ft.padding.only(left=20, right=20),
-    )
-    
     # ========== BARRA DE PROGRESO ==========
     progress_bar = ft.ProgressBar(value=0, bgcolor=COLORS["border"], color=COLORS["primary"], height=4)
     progress_text = ft.Text("Progreso: 0%", size=11, color=COLORS["text_medium"], text_align=ft.TextAlign.CENTER)
@@ -526,31 +855,8 @@ def main(page: ft.Page):
         progress_container.visible = value > 0
         page.update()
 
-    # ========== FUNCIONES DE ENVÍO DE MENSAJES ==========
+    # ========== ENVÍO DE MENSAJES ==========
     
-    async def show_typing_then_respond(mensaje_usuario):
-        nonlocal historial_chat
-        
-        typing_indicator.visible = True
-        page.update()
-        
-        # Detectar contexto
-        contexto = None
-        if MODULOS_DISPONIBLES and detectar_consulta_requisitos(mensaje_usuario):
-            from requisitos import obtener_contexto_requisitos
-            contexto = obtener_contexto_requisitos(mensaje_usuario)
-        
-        respuesta = await asyncio.get_event_loop().run_in_executor(
-            None, obtener_respuesta_chatgpt, mensaje_usuario, historial_chat, contexto
-        )
-        
-        historial_chat.append({"role": "user", "content": mensaje_usuario})
-        historial_chat.append({"role": "assistant", "content": respuesta})
-        
-        typing_indicator.visible = False
-        chat_container.controls.append(create_bot_message(respuesta))
-        page.update()
-
     def send_message(e):
         nonlocal current_progress
         if not message_input.value or message_input.value.strip() == "":
@@ -562,19 +868,54 @@ def main(page: ft.Page):
         message_input.focus()
         
         chat_container.controls.append(create_user_message(user_text))
-        page.update()
+        
+        user_lower = user_text.lower()
+        
+        # 1. Detectar si menciona una ciudad/provincia específica
+        provincia_detectada, ciudad_mencionada = detectar_ciudad_provincia(user_text)
+        
+        if provincia_detectada:
+            # Si menciona una ciudad, mostrar oficinas de esa provincia
+            page.update()
+            mostrar_ubicaciones_por_provincia(provincia_detectada, ciudad_mencionada)
+            if current_progress < 100:
+                update_progress(min(current_progress + 20, 100))
+            return
+        
+        # 2. Detectar si pregunta por ubicaciones en general
+        if detectar_ubicacion_en_mensaje(user_text):
+            page.update()
+            mostrar_ubicaciones()
+            if current_progress < 100:
+                update_progress(min(current_progress + 20, 100))
+            return
+        
+        # 3. Otras respuestas
+        if any(word in user_lower for word in ["hola", "buenos", "buenas", "saludos", "hi", "hello"]):
+            chat_container.controls.append(create_bot_message("¡Hola! 👋 Soy RucBot, tu asistente para trámites del RUC en Ecuador.\n\n¿En qué puedo ayudarte hoy?\n\n• Información sobre el RUC\n• Requisitos para trámites\n• Ubicaciones de oficinas del SRI"))
+        
+        elif any(word in user_lower for word in ["ruc", "que es", "qué es", "significa"]):
+            page.update()
+            mostrar_que_es_ruc()
+            return
+        
+        elif any(word in user_lower for word in ["requisito", "documento", "necesito", "tramite", "trámite", "sacar", "obtener", "papeles", "requisitos"]):
+            chat_container.controls.append(mostrar_opciones_requisitos())
+        
+        elif any(word in user_lower for word in ["gracias", "thank", "agradezco"]):
+            chat_container.controls.append(create_bot_message("¡De nada! 😊 Fue un placer ayudarte. Si tienes más preguntas, no dudes en escribirme. ¡Que tengas un excelente día!"))
+        
+        elif any(word in user_lower for word in ["adios", "adiós", "chao", "bye", "hasta luego"]):
+            chat_container.controls.append(create_bot_message("¡Hasta luego! 👋 Fue un gusto atenderte. ¡Que te vaya muy bien con tu trámite!"))
+        
+        else:
+            chat_container.controls.append(create_bot_message("Entiendo tu consulta. Puedo ayudarte con:\n\n📋 **¿Qué es el RUC?** - Información general\n📝 **Requisitos** - Documentos necesarios\n🏢 **Ubicaciones** - Oficinas del SRI\n\nTambién puedes decirme de qué ciudad eres (ej: 'soy de Milagro') y te muestro las oficinas cercanas. 😊"))
         
         if current_progress < 100:
             update_progress(min(current_progress + 20, 100))
         
-        page.run_task(show_typing_then_respond, user_text)
+        page.update()
 
-    def handle_quick_action(texto):
-        def handler(e):
-            message_input.value = texto
-            send_message(e)
-        return handler
-    
     def mostrar_requisitos_click(e):
         chat_container.controls.append(mostrar_opciones_requisitos())
         page.update()
@@ -665,7 +1006,7 @@ def main(page: ft.Page):
 
     quick_actions_row = ft.Row(
         controls=[
-            create_quick_action("📋", "¿Qué es el RUC?", handle_quick_action("¿Qué es el RUC y para qué sirve?")),
+            create_quick_action("📋", "¿Qué es el RUC?", mostrar_que_es_ruc),
             create_quick_action("📝", "Requisitos", mostrar_requisitos_click),
             create_quick_action("🏢", "Ubicaciones", mostrar_ubicaciones),
         ],
@@ -717,7 +1058,6 @@ def main(page: ft.Page):
     )
 
     chat_container.controls.append(welcome_card)
-    chat_container.controls.append(typing_indicator)
     
     chat_area = ft.Container(
         content=chat_container,
