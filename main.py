@@ -1,5 +1,5 @@
 import flet as ft
-from datetime import datetime
+from datetime import datetime, timedelta
 import asyncio
 
 # Importar módulos personalizados
@@ -211,6 +211,44 @@ def detectar_ciudad_provincia(mensaje):
     return None, None
 
 
+def detectar_consulta_requisitos_ruc(mensaje):
+    """
+    Detecta si el mensaje es una consulta específica sobre requisitos para sacar el RUC
+    """
+    mensaje_lower = mensaje.lower()
+    
+    frases_clave = [
+        "necesito para sacar el ruc",
+        "que necesito para sacar el ruc",
+        "que debo llevar para sacar el ruc", 
+        "documentos para sacar el ruc",
+        "requisitos para obtener el ruc",
+        "que papeles necesito para el ruc",
+        "como sacar el ruc",
+        "trámite del ruc",
+        "sacando el ruc",
+        "obtener el ruc",
+        "quiero sacar el ruc",
+        "para sacar mi ruc",
+        "sacar mi ruc"
+    ]
+    
+    # Detectar frases completas
+    for frase in frases_clave:
+        if frase in mensaje_lower:
+            return True
+    
+    # Detectar combinaciones de palabras clave
+    palabras_clave = ["necesito", "sacar", "ruc", "documentos", "requisitos", "obtener", "tramitar"]
+    
+    if ("necesito" in mensaje_lower or "requisitos" in mensaje_lower or "documentos" in mensaje_lower) and \
+       ("sacar" in mensaje_lower or "obtener" in mensaje_lower or "tramitar" in mensaje_lower) and \
+       ("ruc" in mensaje_lower):
+        return True
+    
+    return False
+
+
 def main(page: ft.Page):
     page.title = "RucBot Ecuador"
     page.padding = 0
@@ -222,7 +260,9 @@ def main(page: ft.Page):
     # Variables de estado
     is_dark_mode = False
     font_size_level = 1
-    current_progress = 0
+    ultima_interaccion = datetime.now()
+    conversacion_activa = True  # Para controlar si la conversación está activa
+    temporizador_tarea = None  # Para almacenar la tarea del temporizador
     
     FONT_SIZES = {
         0: {"msg": 13, "title": 18, "subtitle": 12, "hint": 13},
@@ -270,6 +310,88 @@ def main(page: ft.Page):
     
     def get_timestamp():
         return datetime.now().strftime("%H:%M")
+    
+    def resetear_temporizador():
+        """Reinicia el temporizador de inactividad"""
+        nonlocal ultima_interaccion
+        ultima_interaccion = datetime.now()
+        print(f"🕐 Temporizador reiniciado: {ultima_interaccion.strftime('%H:%M:%S')}")
+    
+    async def verificar_inactividad():
+        """Verifica periódicamente si ha pasado más de 5 minutos sin actividad"""
+        while True:
+            await asyncio.sleep(10)  # Verificar cada 10 segundos
+            
+            # Solo verificar si la conversación está activa
+            if not conversacion_activa:
+                continue
+                
+            ahora = datetime.now()
+            diferencia = (ahora - ultima_interaccion).total_seconds()
+            
+            print(f"⏳ Tiempo desde última interacción: {diferencia:.0f} segundos")
+            
+            if diferencia > 300:  # 5 minutos = 300 segundos
+                print("⏰ 5 minutos de inactividad - Cerrando conversación...")
+                await mostrar_despedida_por_inactividad()
+                break
+    
+    async def mostrar_despedida_por_inactividad():
+        """Muestra mensaje de despedida por inactividad"""
+        nonlocal conversacion_activa
+        
+        if conversacion_activa:
+            conversacion_activa = False
+            
+            # Agregar mensaje de despedida
+            mensaje_despedida = create_bot_message("⏰ **He notado que hace un tiempo no interactúas conmigo. Por inactividad, estoy cerrando esta conversación.**\n\nSi necesitas ayuda nuevamente, solo escribe 'Hola' o cualquier mensaje para comenzar una nueva conversación. ¡Hasta luego! 👋")
+            
+            chat_container.controls.append(mensaje_despedida)
+            await page.update_async()
+            
+            # Deshabilitar el campo de entrada temporalmente
+            message_input.disabled = True
+            send_btn.disabled = True
+            
+            # Cambiar el color del campo de entrada para indicar que está deshabilitado
+            input_box.bgcolor = ft.colors.with_opacity(0.5, COLORS["bg_white"])
+            await page.update_async()
+    
+    def reiniciar_conversacion():
+        """Reinicia la conversación cuando el usuario vuelve a escribir"""
+        nonlocal conversacion_activa, ultima_interaccion
+        
+        if not conversacion_activa:
+            # Limpiar el chat (excepto el mensaje de bienvenida inicial)
+            while len(chat_container.controls) > 1:
+                chat_container.controls.pop()
+            
+            # Resetear variables
+            conversacion_activa = True
+            
+            # Habilitar el campo de entrada
+            message_input.disabled = False
+            send_btn.disabled = False
+            input_box.bgcolor = COLORS["bg_white"]
+            
+            # Mostrar mensaje de bienvenida
+            chat_container.controls.append(create_bot_message("¡Hola de nuevo! 👋 Soy RucBot, tu asistente para trámites del RUC en Ecuador.\n\n¿En qué puedo ayudarte hoy?\n\n• Información sobre el RUC\n• Requisitos para trámites\n• Ubicaciones de oficinas del SRI"))
+            
+            # Reiniciar temporizador
+            resetear_temporizador()
+            
+            # Reiniciar la tarea del temporizador
+            iniciar_temporizador()
+
+    def iniciar_temporizador():
+        """Inicia el temporizador de inactividad"""
+        nonlocal temporizador_tarea
+        # Cancelar tarea anterior si existe
+        if temporizador_tarea and not temporizador_tarea.done():
+            temporizador_tarea.cancel()
+        
+        # Crear nueva tarea
+        temporizador_tarea = page.run_task(verificar_inactividad)
 
     # ========== FUNCIONES DE UI ==========
     
@@ -381,11 +503,13 @@ def main(page: ft.Page):
             chat_container.controls.append(create_user_message("Sí, otro trámite"))
             chat_container.controls.append(mostrar_opciones_requisitos())
             page.update()
+            resetear_temporizador()
         
         def no_gracias(e):
             chat_container.controls.append(create_user_message("No, gracias"))
-            chat_container.controls.append(create_bot_message("¡Perfecto! Si necesitas algo más, no dudes en preguntarme. ¡Que tengas un excelente día! 😊"))
+            chat_container.controls.append(create_bot_message("¡Entendido! Estoy aquí por si necesitas algo más. 😊\n\n¿En qué otra cosa puedo ayudarte?"))
             page.update()
+            resetear_temporizador()
         
         return ft.Container(
             content=ft.Row(
@@ -443,6 +567,7 @@ def main(page: ft.Page):
     
     def mostrar_requisitos_tipo(tipo_tramite, titulo):
         chat_container.controls.append(create_user_message(titulo))
+        resetear_temporizador()
         
         if MODULOS_DISPONIBLES:
             requisitos = obtener_requisitos(tipo_tramite)
@@ -519,11 +644,13 @@ def main(page: ft.Page):
             chat_container.controls.append(create_user_message("Sí, quiero hacer el trámite"))
             chat_container.controls.append(mostrar_opciones_requisitos())
             page.update()
+            resetear_temporizador()
         
         def no_solo_info(e):
             chat_container.controls.append(create_user_message("No, solo quería información"))
             chat_container.controls.append(create_bot_message("¡Perfecto! Si más adelante necesitas hacer algún trámite del RUC, aquí estaré para ayudarte. 😊\n\n¿Hay algo más en lo que pueda ayudarte?"))
             page.update()
+            resetear_temporizador()
         
         def ver_ubicaciones(e):
             chat_container.controls.append(create_user_message("Ver oficinas del SRI"))
@@ -620,6 +747,7 @@ def main(page: ft.Page):
         
         chat_container.controls.append(mensaje_ruc)
         page.update()
+        resetear_temporizador()
 
     # ========== FUNCIONES DE UBICACIONES ==========
     
@@ -656,6 +784,7 @@ def main(page: ft.Page):
         if not modulo_ubicacion or modulo_ubicacion.df.empty:
             chat_container.controls.append(create_bot_message("⚠️ No pude cargar las ubicaciones."))
             page.update()
+            resetear_temporizador()
             return
         
         oficinas = modulo_ubicacion.buscar_por_provincia(provincia)
@@ -663,6 +792,7 @@ def main(page: ft.Page):
         if not oficinas:
             chat_container.controls.append(create_bot_message(f"No encontré oficinas del SRI en {provincia}. 😕\n\n¿Te gustaría ver todas las provincias disponibles?"))
             page.update()
+            resetear_temporizador()
             return
         
         # Crear lista de oficinas
@@ -747,6 +877,7 @@ def main(page: ft.Page):
         
         chat_container.controls.append(mensaje)
         page.update()
+        resetear_temporizador()
     
     def mostrar_ubicaciones(e=None):
         """Muestra todas las provincias con checkbox"""
@@ -755,6 +886,7 @@ def main(page: ft.Page):
         if not modulo_ubicacion or modulo_ubicacion.df.empty:
             chat_container.controls.append(create_bot_message("⚠️ No pude cargar las ubicaciones. Verifica el archivo JSON."))
             page.update()
+            resetear_temporizador()
             return
         
         provincias = modulo_ubicacion.obtener_provincias()
@@ -762,6 +894,7 @@ def main(page: ft.Page):
         if not provincias:
             chat_container.controls.append(create_bot_message("⚠️ No hay datos de ubicaciones disponibles."))
             page.update()
+            resetear_temporizador()
             return
         
         lista_provincias = ft.Column(controls=[], spacing=8, scroll=ft.ScrollMode.AUTO)
@@ -778,6 +911,7 @@ def main(page: ft.Page):
                     contenedor_oficinas.controls.clear()
                     contenedor_oficinas.visible = False
                 page.update()
+                resetear_temporizador()
             return handler
         
         for prov in provincias:
@@ -837,28 +971,13 @@ def main(page: ft.Page):
         
         chat_container.controls.append(mensaje_ubicaciones)
         page.update()
-
-    # ========== BARRA DE PROGRESO ==========
-    progress_bar = ft.ProgressBar(value=0, bgcolor=COLORS["border"], color=COLORS["primary"], height=4)
-    progress_text = ft.Text("Progreso: 0%", size=11, color=COLORS["text_medium"], text_align=ft.TextAlign.CENTER)
-    progress_container = ft.Container(
-        content=ft.Column(controls=[progress_text, progress_bar], spacing=4, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-        padding=ft.padding.only(left=20, right=20, top=8, bottom=4),
-        visible=False,
-    )
-    
-    def update_progress(value):
-        nonlocal current_progress
-        current_progress = value
-        progress_bar.value = value / 100
-        progress_text.value = f"Progreso: {value}%"
-        progress_container.visible = value > 0
-        page.update()
+        resetear_temporizador()
 
     # ========== ENVÍO DE MENSAJES ==========
     
     def send_message(e):
-        nonlocal current_progress
+        nonlocal ultima_interaccion, conversacion_activa
+        
         if not message_input.value or message_input.value.strip() == "":
             return
         
@@ -866,6 +985,28 @@ def main(page: ft.Page):
         message_input.value = ""
         page.update()
         message_input.focus()
+        
+        # Si la conversación está inactiva, reiniciarla
+        if not conversacion_activa:
+            reiniciar_conversacion()
+            # Añadir el mensaje del usuario después de reiniciar
+            chat_container.controls.append(create_user_message(user_text))
+            
+            # Procesar el mensaje normalmente después del reinicio
+            user_lower = user_text.lower()
+            if any(word in user_lower for word in ["hola", "buenos", "buenas", "saludos", "hi", "hello"]):
+                # Ya se mostró el mensaje de bienvenida en reiniciar_conversacion()
+                pass
+            else:
+                # Responder con el mensaje estándar
+                chat_container.controls.append(create_bot_message("Entiendo tu consulta. Puedo ayudarte con:\n\n📋 **¿Qué es el RUC?** - Información general\n📝 **Requisitos** - Documentos necesarios\n🏢 **Ubicaciones** - Oficinas del SRI\n\nTambién puedes decirme de qué ciudad eres (ej: 'soy de Milagro') y te muestro las oficinas cercanas. 😊"))
+            
+            page.update()
+            resetear_temporizador()
+            return
+        
+        # Actualizar tiempo de última interacción
+        resetear_temporizador()
         
         chat_container.controls.append(create_user_message(user_text))
         
@@ -878,19 +1019,21 @@ def main(page: ft.Page):
             # Si menciona una ciudad, mostrar oficinas de esa provincia
             page.update()
             mostrar_ubicaciones_por_provincia(provincia_detectada, ciudad_mencionada)
-            if current_progress < 100:
-                update_progress(min(current_progress + 20, 100))
             return
         
         # 2. Detectar si pregunta por ubicaciones en general
         if detectar_ubicacion_en_mensaje(user_text):
             page.update()
             mostrar_ubicaciones()
-            if current_progress < 100:
-                update_progress(min(current_progress + 20, 100))
             return
         
-        # 3. Otras respuestas
+        # 3. Detectar consultas específicas sobre requisitos para sacar el RUC
+        if detectar_consulta_requisitos_ruc(user_text):
+            chat_container.controls.append(mostrar_opciones_requisitos())
+            page.update()
+            return
+        
+        # 4. Otras respuestas
         if any(word in user_lower for word in ["hola", "buenos", "buenas", "saludos", "hi", "hello"]):
             chat_container.controls.append(create_bot_message("¡Hola! 👋 Soy RucBot, tu asistente para trámites del RUC en Ecuador.\n\n¿En qué puedo ayudarte hoy?\n\n• Información sobre el RUC\n• Requisitos para trámites\n• Ubicaciones de oficinas del SRI"))
         
@@ -906,19 +1049,25 @@ def main(page: ft.Page):
             chat_container.controls.append(create_bot_message("¡De nada! 😊 Fue un placer ayudarte. Si tienes más preguntas, no dudes en escribirme. ¡Que tengas un excelente día!"))
         
         elif any(word in user_lower for word in ["adios", "adiós", "chao", "bye", "hasta luego"]):
-            chat_container.controls.append(create_bot_message("¡Hasta luego! 👋 Fue un gusto atenderte. ¡Que te vaya muy bien con tu trámite!"))
+            # Aquí sí cerramos la conversación cuando el usuario se despide explícitamente
+            chat_container.controls.append(create_bot_message("¡Hasta luego! 👋 Fue un gusto atenderte. ¡Que te vaya muy bien con tu trámite!\n\nSi necesitas más ayuda en el futuro, solo escribe 'Hola' para comenzar una nueva conversación."))
+            conversacion_activa = False
+            
+            # Deshabilitar el campo de entrada
+            message_input.disabled = True
+            send_btn.disabled = True
+            input_box.bgcolor = ft.colors.with_opacity(0.5, COLORS["bg_white"])
+            page.update()
         
         else:
             chat_container.controls.append(create_bot_message("Entiendo tu consulta. Puedo ayudarte con:\n\n📋 **¿Qué es el RUC?** - Información general\n📝 **Requisitos** - Documentos necesarios\n🏢 **Ubicaciones** - Oficinas del SRI\n\nTambién puedes decirme de qué ciudad eres (ej: 'soy de Milagro') y te muestro las oficinas cercanas. 😊"))
         
-        if current_progress < 100:
-            update_progress(min(current_progress + 20, 100))
-        
         page.update()
-
+    
     def mostrar_requisitos_click(e):
         chat_container.controls.append(mostrar_opciones_requisitos())
         page.update()
+        resetear_temporizador()
 
     # ========== TEMA Y UI ==========
     
@@ -940,9 +1089,6 @@ def main(page: ft.Page):
         page.bgcolor = COLORS["bg_main"]
         header.bgcolor = COLORS["primary"]
         input_area.bgcolor = COLORS["bg_main"]
-        progress_bar.bgcolor = COLORS["border"]
-        progress_bar.color = COLORS["primary"]
-        progress_text.color = COLORS["text_medium"]
         input_box.bgcolor = COLORS["bg_white"]
         input_box.border = ft.border.all(1.5, COLORS["border"])
         message_input.hint_style = ft.TextStyle(color=COLORS["text_medium"], size=get_font("hint"))
@@ -1067,7 +1213,7 @@ def main(page: ft.Page):
     )
 
     main_content = ft.Column(
-        controls=[header, progress_container, quick_actions, chat_area, input_area],
+        controls=[header, quick_actions, chat_area, input_area],
         spacing=0, expand=True, visible=False,
     )
 
@@ -1095,6 +1241,10 @@ def main(page: ft.Page):
         splash.visible = False
         main_content.visible = True
         page.bgcolor = COLORS["bg_main"]
+        
+        # Iniciar el temporizador de inactividad
+        iniciar_temporizador()
+        
         page.update()
 
     page.bgcolor = "#0c4597"

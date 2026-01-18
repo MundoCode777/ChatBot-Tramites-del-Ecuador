@@ -4,7 +4,8 @@ from requisitos import obtener_requisitos, formatear_requisitos
 
 class FeedbackManager:
     def __init__(self, page, chat_container, create_bot_avatar, create_user_message, 
-                 create_bot_message, get_timestamp, get_font, COLORS, mostrar_opciones_requisitos):
+                 create_bot_message, get_timestamp, get_font, COLORS, mostrar_opciones_requisitos,
+                 resetear_temporizador=None):
         self.page = page
         self.chat_container = chat_container
         self.create_bot_avatar = create_bot_avatar
@@ -14,6 +15,7 @@ class FeedbackManager:
         self.get_font = get_font
         self.COLORS = COLORS
         self.mostrar_opciones_requisitos = mostrar_opciones_requisitos
+        self.resetear_temporizador = resetear_temporizador
     
     def crear_mensaje_feedback(self):
         """Crea mensaje preguntando si le gustó la información"""
@@ -29,16 +31,28 @@ class FeedbackManager:
             
             self.chat_container.controls.append(self.create_bot_message(respuesta_bot))
             self.page.update()
+            
+            # Reiniciar temporizador si está disponible
+            if self.resetear_temporizador:
+                self.resetear_temporizador()
         
         def sugerir_requisitos(e):
             self.chat_container.controls.append(self.create_user_message("Sí, quiero saber los requisitos"))
             self.chat_container.controls.append(self.mostrar_opciones_requisitos())
             self.page.update()
+            
+            # Reiniciar temporizador si está disponible
+            if self.resetear_temporizador:
+                self.resetear_temporizador()
         
         def no_requisitos(e):
             self.chat_container.controls.append(self.create_user_message("No, solo eso por ahora"))
-            self.chat_container.controls.append(self.create_bot_message("¡Gracias por usar mi servicio! Si en algún momento necesitas información sobre requisitos o cualquier otra consulta, no dudes en preguntarme. ¡Que tengas un excelente día! 😊"))
+            self.chat_container.controls.append(self.create_bot_message("¡Entendido! Estoy aquí por si necesitas algo más. 😊\n\n¿En qué otra cosa puedo ayudarte?"))
             self.page.update()
+            
+            # Reiniciar temporizador si está disponible
+            if self.resetear_temporizador:
+                self.resetear_temporizador()
         
         feedback_buttons = ft.Row(
             controls=[
@@ -81,7 +95,7 @@ class FeedbackManager:
                             ft.Container(
                                 content=ft.Text("No, gracias", size=12),
                                 padding=ft.padding.only(left=14, right=14, top=8, bottom=8),
-                                bgcolor=self.COLORS["primary"],
+                                bgcolor="#64748B",
                                 border_radius=20,
                                 ink=True,
                                 on_click=no_requisitos
@@ -153,6 +167,10 @@ class FeedbackManager:
                 self.chat_container.controls.append(self.create_bot_message("Lo siento, no encontré información específica para ese tipo de trámite. ¿Podrías ser más específico?"))
             
             self.page.update()
+            
+            # Reiniciar temporizador si está disponible
+            if self.resetear_temporizador:
+                self.resetear_temporizador()
         
         opciones = ft.Column(
             controls=[
@@ -267,20 +285,24 @@ class FeedbackManager:
                                             ink=True,
                                             on_click=lambda e: [
                                                 self.chat_container.controls.append(self.mostrar_opciones_requisitos()),
-                                                self.page.update()
+                                                self.page.update(),
+                                                # Reiniciar temporizador si está disponible
+                                                (lambda: self.resetear_temporizador() if self.resetear_temporizador else None)()
                                             ]
                                         ),
                                         ft.Container(
                                             content=ft.Text("No, gracias", size=12),
                                             padding=ft.padding.only(left=12, right=12, top=6, bottom=6),
-                                            bgcolor="#0c4597",
+                                            bgcolor="#64748B",
                                             border_radius=16,
                                             ink=True,
                                             on_click=lambda e: [
                                                 self.chat_container.controls.append(
-                                                    self.create_bot_message("¡Gracias por usar mi servicio! Si en algún momento necesitas más ayuda, no dudes en preguntarme. ¡Que tengas un excelente día! 😊")
+                                                    self.create_bot_message("¡Entendido! Estoy aquí por si necesitas algo más. 😊\n\n¿En qué otra cosa puedo ayudarte?")
                                                 ),
-                                                self.page.update()
+                                                self.page.update(),
+                                                # Reiniciar temporizador si está disponible
+                                                (lambda: self.resetear_temporizador() if self.resetear_temporizador else None)()
                                             ]
                                         ),
                                     ],
